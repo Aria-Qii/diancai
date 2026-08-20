@@ -94,6 +94,9 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
 .search-box{margin-bottom:12px}
 .search-box input{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:15px;background:var(--card);color:var(--ink);outline:none}
 .search-box input:focus{border-color:var(--accent)}
+.manage-sheet{display:flex;flex-direction:column}
+.manage-scroll{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:140px;padding-bottom:4px}
+.manage-sheet .add-fab{position:static;margin-top:12px}
 
 /* dish list */
 .dish{
@@ -202,7 +205,7 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
 
 <!-- 菜单管理 -->
 <div class="overlay" id="manageOverlay">
-  <div class="sheet">
+  <div class="sheet manage-sheet">
     <div class="sheet-head">
       <h2>📖 菜单管理</h2>
       <button class="x" data-close="manageOverlay">×</button>
@@ -210,12 +213,14 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
     <div class="search-box">
       <input type="text" id="searchInput" placeholder="🔍 搜索菜名或类型" autocomplete="off">
     </div>
-    <div id="dishList"></div>
-    <button class="btn-ghost" id="seedBtn" style="margin-bottom:10px">📦 导入内置 60 道家常菜</button>
-    <div class="backup-row">
-      <button class="btn-ghost" id="importExcelBtn">📊 从 Excel 导入</button>
-      <button class="btn-ghost" id="templateBtn">📄 导出 Excel 模板</button>
-      <input type="file" id="excelInput" accept=".xls,.xlsx" style="display:none">
+    <div class="manage-scroll">
+      <div id="dishList"></div>
+      <button class="btn-ghost" id="seedBtn" style="margin-bottom:10px">📦 导入内置 60 道家常菜</button>
+      <div class="backup-row">
+        <button class="btn-ghost" id="importExcelBtn">📊 从 Excel 导入</button>
+        <button class="btn-ghost" id="templateBtn">📄 导出 Excel 模板</button>
+        <input type="file" id="excelInput" accept=".xls,.xlsx" style="display:none">
+      </div>
     </div>
     <button class="add-fab" id="addBtn">＋ 添加菜品</button>
   </div>
