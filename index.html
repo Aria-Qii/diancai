@@ -56,7 +56,7 @@ body{
 .chip.on{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 4px 14px rgba(255,107,53,.35)}
 
 /* wheel */
-.wheel-wrap{position:relative;margin:6px auto 0;max-width:340px}
+.wheel-wrap{position:relative;margin:22px auto 0;max-width:340px}
 .pointer{
   position:absolute;top:-14px;left:50%;transform:translateX(-50%);z-index:5;
   width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;
@@ -144,6 +144,8 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
   font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#FF8A50,#FF5F2E);
   cursor:pointer;box-shadow:0 6px 18px rgba(255,107,53,.35);margin-top:6px;
 }
+.backup-row{display:flex;gap:10px;margin-top:14px}
+.backup-row .btn-ghost{margin-top:0;font-size:14px}
 
 /* result card */
 .result-card{
@@ -175,7 +177,7 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
 <div class="wrap">
 
   <div class="top">
-    <h1>🍳 今天吃什么<span class="sub">转盘帮你拿主意</span></h1>
+    <h1>🍳 今天吃什么<span class="sub">小猪转盘帮你拿主意</span></h1>
     <button class="iconbtn" id="manageBtn">📖 菜单</button>
   </div>
 
@@ -198,6 +200,11 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
       <button class="x" data-close="manageOverlay">×</button>
     </div>
     <div id="dishList"></div>
+    <div class="backup-row">
+      <button class="btn-ghost" id="exportBtn">⬇️ 导出备份</button>
+      <button class="btn-ghost" id="importBtn">⬆️ 导入备份</button>
+      <input type="file" id="importInput" accept=".json,application/json" style="display:none">
+    </div>
     <button class="add-fab" id="addBtn">＋ 添加菜品</button>
   </div>
 </div>
@@ -255,7 +262,6 @@ let dishes = [];
 let currentCat = '全部';
 let rotation = 0;      // 当前累计旋转弧度
 let spinning = false;
-let imgCache = {};     // id -> HTMLImageElement
 let editingId = null;  // 编辑中的菜品 id
 let photoData = null;  // 表单当前照片 dataURL
 
@@ -356,12 +362,6 @@ function processImage(file){
 const canvas = $('#wheel'), ctx = canvas.getContext('2d');
 const SIZE = canvas.width, CX = SIZE/2, CY = SIZE/2, R = SIZE/2 - 8;
 
-function getImage(id, dataURL){
-  if(imgCache[id]) return imgCache[id];
-  const img = new Image(); img.src = dataURL;
-  imgCache[id] = img;
-  return img;
-}
 function getCurrentDishes(){
   return currentCat==='全部' ? dishes : dishes.filter(d=>d.category===currentCat);
 }
@@ -390,25 +390,6 @@ function drawWheel(list){
     ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,a0,a1); ctx.closePath();
     ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
     ctx.fill();
-    // 有照片则裁切成扇形铺图
-    if(d.photo){
-      const img = getImage(d.id, d.photo);
-      if(img.complete && img.naturalWidth>0){
-        ctx.save();
-        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,a0,a1); ctx.closePath();
-        ctx.clip();
-        const mid = a0+seg/2;
-        const ccx = Math.cos(mid)*R*0.5, ccy = Math.sin(mid)*R*0.5;
-        const s = R*1.15;
-        ctx.drawImage(img, ccx-s/2, ccy-s/2, s, s);
-        ctx.restore();
-        // 内侧渐变压暗，保证文字可读
-        const g = ctx.createRadialGradient(0,0,R*0.15,0,0,R*0.78);
-        g.addColorStop(0,'rgba(0,0,0,.42)'); g.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,a0,a1); ctx.closePath();
-        ctx.fillStyle = g; ctx.fill();
-      }
-    }
     // 分隔线
     ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a0)*R, Math.sin(a0)*R);
     ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2.5; ctx.stroke();
@@ -526,7 +507,6 @@ function renderList(){
       const id = btn.getAttribute('data-id');
       if(!confirm('删除这道菜？')) return;
       await removeDish(id);
-      delete imgCache[id];
       dishes = await loadDishes();
       renderList(); refreshWheel();
       toast('已删除');
@@ -595,7 +575,6 @@ $('#saveBtn').onclick = async ()=>{
     createdAt: editingId ? (dishes.find(x=>x.id===editingId)||{}).createdAt || Date.now() : Date.now()
   };
   await persistDish(dish);
-  if(editingId) delete imgCache[dish.id];
   dishes = await loadDishes();
   closeOverlay('addOverlay');
   renderList(); refreshWheel();
@@ -625,6 +604,58 @@ $('#photoRm').onclick = e=>{
 $('#rOk').onclick = ()=>{ closeOverlay('resultOverlay'); toast('就它了，开吃！😋'); };
 $('#rAgain').onclick = ()=>{ closeOverlay('resultOverlay'); setTimeout(spin, 120); };
 
+/* ================= 导出 / 导入备份 ================= */
+function exportData(){
+  if(!dishes.length){ toast('还没有菜品可导出'); return; }
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
+  const data = { app:'diancai', version:1, exportedAt:new Date().toISOString(), dishes };
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'diancai_backup_'+dateStr+'.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('已导出 '+dishes.length+' 道菜');
+}
+function importData(file){
+  const rd = new FileReader();
+  rd.onload = async e => {
+    let data;
+    try{ data = JSON.parse(e.target.result); }catch{ toast('导入失败：不是有效的 JSON 文件'); return; }
+    const list = Array.isArray(data) ? data : data.dishes;
+    if(!Array.isArray(list)){ toast('导入失败：文件格式不对'); return; }
+    let added=0, updated=0;
+    for(const item of list){
+      if(!item || typeof item.name !== 'string' || !item.name.trim()) continue;
+      const category = CATEGORIES.includes(item.category) ? item.category : '主食';
+      const dish = {
+        id: (item.id && /^[a-zA-Z0-9_-]+$/.test(item.id)) ? item.id : ('d'+Date.now()+Math.random().toString(36).slice(2,7)),
+        name: item.name.trim().slice(0,20),
+        category,
+        photo: (item.photo && typeof item.photo==='string' && /^data:image\//.test(item.photo)) ? item.photo : null,
+        createdAt: item.createdAt || Date.now()
+      };
+      const existed = dishes.some(x=>x.id===dish.id);
+      await persistDish(dish);
+      existed ? updated++ : added++;
+    }
+    if(added+updated===0){ toast('没有可导入的菜品'); return; }
+    dishes = await loadDishes();
+    renderList(); refreshWheel();
+    toast('导入完成：新增 '+added+'，更新 '+updated);
+  };
+  rd.onerror = ()=> toast('读取文件失败');
+  rd.readAsText(file);
+}
+$('#exportBtn').onclick = exportData;
+$('#importBtn').onclick = ()=> $('#importInput').click();
+$('#importInput').onchange = e => { const f = e.target.files[0]; if(f){ importData(f); } e.target.value=''; };
+
 /* ================= 启动 ================= */
 (async function init(){
   await initStorage();
@@ -632,11 +663,6 @@ $('#rAgain').onclick = ()=>{ closeOverlay('resultOverlay'); setTimeout(spin, 120
   fillCatSelect();
   renderTabs();
   refreshWheel();
-  // 监听图片加载完成后重绘（保证照片铺进转盘）
-  const redraw = ()=> { if(!spinning) drawWheel(getCurrentDishes()); };
-  Object.values(imgCache).forEach(img=>{ if(img) img.onload = redraw; });
-  // 预加载已有图片
-  dishes.forEach(d=>{ if(d.photo){ const im = getImage(d.id,d.photo); im.onload = redraw; } });
 })();
 
 /* ================= Service Worker ================= */
