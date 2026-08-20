@@ -109,6 +109,11 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
   font-size:13px;font-weight:600;cursor:pointer;flex:0 0 auto;
 }
 .dish .del:active{background:#FBDCD4}
+.dish .edit{
+  border:none;background:#EDF2F7;color:#4A5568;border-radius:10px;padding:8px 12px;
+  font-size:13px;font-weight:600;cursor:pointer;flex:0 0 auto;
+}
+.dish .edit:active{background:#E2E8F0}
 .empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;line-height:1.8}
 .empty .big{font-size:44px;display:block;margin-bottom:8px}
 
@@ -200,13 +205,12 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
       <button class="x" data-close="manageOverlay">×</button>
     </div>
     <div id="dishList"></div>
+    <button class="btn-ghost" id="seedBtn" style="margin-bottom:10px">📦 导入内置 60 道家常菜</button>
     <div class="backup-row">
-      <button class="btn-ghost" id="exportBtn">⬇️ 导出备份</button>
-      <button class="btn-ghost" id="importBtn">⬆️ 导入备份</button>
-      <input type="file" id="importInput" accept=".json,application/json" style="display:none">
+      <button class="btn-ghost" id="importExcelBtn">📊 从 Excel 导入</button>
+      <button class="btn-ghost" id="templateBtn">📄 导出 Excel 模板</button>
+      <input type="file" id="excelInput" accept=".xls,.xlsx" style="display:none">
     </div>
-    <button class="btn-ghost" id="importExcelBtn" style="margin-top:10px">📊 从 Excel 导入（菜品类型 / 名称）</button>
-    <input type="file" id="excelInput" accept=".xls,.xlsx" style="display:none">
     <button class="add-fab" id="addBtn">＋ 添加菜品</button>
   </div>
 </div>
@@ -260,6 +264,26 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
 const CATEGORIES = ['主食','甜品','汤','小炒','大菜'];
 const CAT_EMOJI = {'主食':'🍚','甜品':'🍰','汤':'🍲','小炒':'🥘','大菜':'🍖'};
 const WHEEL_COLORS = ['#FF8A65','#FFC93C','#66BB6A','#4FC3F7','#BA68C8','#F06292','#4DB6AC','#FFB74D','#7986CB','#AED581','#FF7043','#9575CD','#EF5350','#26C6DA'];
+
+/* 内置基础菜单 60 道家常菜 */
+const DEFAULT_DISHES = [
+  ['主食','蛋炒饭'],['主食','扬州炒饭'],['主食','番茄鸡蛋面'],['主食','红烧牛肉面'],
+  ['主食','炸酱面'],['主食','葱油拌面'],['主食','韭菜鸡蛋饺子'],['主食','猪肉白菜饺子'],
+  ['主食','小笼包'],['主食','生煎包'],['主食','皮蛋瘦肉粥'],['主食','八宝粥'],
+  ['甜品','银耳莲子羹'],['甜品','红豆沙'],['甜品','双皮奶'],['甜品','酒酿圆子'],
+  ['甜品','冰糖雪梨'],['甜品','绿豆沙'],
+  ['汤','番茄蛋花汤'],['汤','紫菜蛋花汤'],['汤','冬瓜排骨汤'],['汤','玉米排骨汤'],
+  ['汤','萝卜牛腩汤'],['汤','山药排骨汤'],['汤','莲藕排骨汤'],['汤','鲫鱼豆腐汤'],
+  ['汤','酸辣汤'],['汤','老火鸡汤'],
+  ['小炒','番茄炒蛋'],['小炒','青椒肉丝'],['小炒','鱼香肉丝'],['小炒','宫保鸡丁'],
+  ['小炒','回锅肉'],['小炒','蒜蓉西兰花'],['小炒','醋溜土豆丝'],['小炒','地三鲜'],
+  ['小炒','麻婆豆腐'],['小炒','家常豆腐'],['小炒','干煸四季豆'],['小炒','韭菜炒鸡蛋'],
+  ['小炒','荷兰豆炒腊肠'],['小炒','蒜苔炒肉'],['小炒','木须肉'],['小炒','西芹炒百合'],
+  ['大菜','红烧肉'],['大菜','糖醋排骨'],['大菜','红烧排骨'],['大菜','可乐鸡翅'],
+  ['大菜','清蒸鲈鱼'],['大菜','红烧鱼'],['大菜','糖醋里脊'],['大菜','红烧鸡块'],
+  ['大菜','黄焖鸡'],['大菜','啤酒鸭'],['大菜','粉蒸肉'],['大菜','梅菜扣肉'],
+  ['大菜','白切鸡'],['大菜','椒盐虾'],['大菜','油焖大虾'],['大菜','红烧狮子头']
+];
 
 let dishes = [];
 let currentCat = '全部';
@@ -328,6 +352,18 @@ async function removeDish(id){
   if(useIDB){ await idbDel(id); return; }
   const all = await loadDishes();
   localStorage.setItem('dishes', JSON.stringify(all.filter(x=>x.id!==id)));
+}
+
+/* 内置菜单（按 名称+类型 去重追加） */
+async function seedDefaultDishes(){
+  let added = 0;
+  for(const [category, name] of DEFAULT_DISHES){
+    if(dishes.some(d => d.name===name && d.category===category)) continue;
+    const dish = { id: 'd'+Date.now()+Math.random().toString(36).slice(2,7), name, category, photo: null, createdAt: Date.now() };
+    await persistDish(dish);
+    added++;
+  }
+  return added;
 }
 
 /* ================= 工具 ================= */
@@ -501,11 +537,15 @@ function renderList(){
       html += '<div class="dish">'
         + '<div class="thumb">'+thumb+'</div>'
         + '<div class="info"><div class="nm">'+esc(d.name)+'</div><div class="ct">'+c+'</div></div>'
+        + '<button class="edit" data-id="'+d.id+'">编辑</button>'
         + '<button class="del" data-id="'+d.id+'">删除</button>'
         + '</div>';
     });
   });
   box.innerHTML = html;
+  box.querySelectorAll('.edit').forEach(btn=>{
+    btn.onclick = ()=> openAdd(btn.getAttribute('data-id'));
+  });
   box.querySelectorAll('.del').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.getAttribute('data-id');
@@ -608,57 +648,22 @@ $('#photoRm').onclick = e=>{
 $('#rOk').onclick = ()=>{ closeOverlay('resultOverlay'); toast('就它了，开吃！😋'); };
 $('#rAgain').onclick = ()=>{ closeOverlay('resultOverlay'); setTimeout(spin, 120); };
 
-/* ================= 导出 / 导入备份 ================= */
-function exportData(){
-  if(!dishes.length){ toast('还没有菜品可导出'); return; }
-  const d = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  const dateStr = d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
-  const data = { app:'diancai', version:1, exportedAt:new Date().toISOString(), dishes };
-  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'diancai_backup_'+dateStr+'.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  toast('已导出 '+dishes.length+' 道菜');
+/* ================= 导出 Excel 模板 ================= */
+function exportExcelTemplate(){
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([['菜品类型','名称']]);
+  ws['!cols'] = [{wch:12},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, ws, '菜单模板');
+  XLSX.writeFile(wb, '点菜导入模板.xlsx');
+  toast('模板已导出，照着填就行');
 }
-function importData(file){
-  const rd = new FileReader();
-  rd.onload = async e => {
-    let data;
-    try{ data = JSON.parse(e.target.result); }catch{ toast('导入失败：不是有效的 JSON 文件'); return; }
-    const list = Array.isArray(data) ? data : data.dishes;
-    if(!Array.isArray(list)){ toast('导入失败：文件格式不对'); return; }
-    let added=0, updated=0;
-    for(const item of list){
-      if(!item || typeof item.name !== 'string' || !item.name.trim()) continue;
-      const category = CATEGORIES.includes(item.category) ? item.category : '主食';
-      const dish = {
-        id: (item.id && /^[a-zA-Z0-9_-]+$/.test(item.id)) ? item.id : ('d'+Date.now()+Math.random().toString(36).slice(2,7)),
-        name: item.name.trim().slice(0,20),
-        category,
-        photo: (item.photo && typeof item.photo==='string' && /^data:image\//.test(item.photo)) ? item.photo : null,
-        createdAt: item.createdAt || Date.now()
-      };
-      const existed = dishes.some(x=>x.id===dish.id);
-      await persistDish(dish);
-      existed ? updated++ : added++;
-    }
-    if(added+updated===0){ toast('没有可导入的菜品'); return; }
-    dishes = await loadDishes();
-    renderList(); refreshWheel();
-    toast('导入完成：新增 '+added+'，更新 '+updated);
-  };
-  rd.onerror = ()=> toast('读取文件失败');
-  rd.readAsText(file);
-}
-$('#exportBtn').onclick = exportData;
-$('#importBtn').onclick = ()=> $('#importInput').click();
-$('#importInput').onchange = e => { const f = e.target.files[0]; if(f){ importData(f); } e.target.value=''; };
+$('#templateBtn').onclick = exportExcelTemplate;
+$('#seedBtn').onclick = async ()=>{
+  const added = await seedDefaultDishes();
+  dishes = await loadDishes();
+  renderList(); refreshWheel();
+  toast(added>0 ? '已导入内置菜单 '+added+' 道' : '内置菜单都已在里面了');
+};
 
 /* ================= 从 Excel 导入 ================= */
 async function importExcel(file){
@@ -704,6 +709,10 @@ $('#excelInput').onchange = e => { const f = e.target.files[0]; if(f){ importExc
 (async function init(){
   await initStorage();
   dishes = await loadDishes();
+  if(dishes.length === 0){
+    await seedDefaultDishes();
+    dishes = await loadDishes();
+  }
   fillCatSelect();
   renderTabs();
   refreshWheel();
