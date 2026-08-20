@@ -205,6 +205,8 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
       <button class="btn-ghost" id="importBtn">⬆️ 导入备份</button>
       <input type="file" id="importInput" accept=".json,application/json" style="display:none">
     </div>
+    <button class="btn-ghost" id="importExcelBtn" style="margin-top:10px">📊 从 Excel 导入（菜品类型 / 名称）</button>
+    <input type="file" id="excelInput" accept=".xls,.xlsx" style="display:none">
     <button class="add-fab" id="addBtn">＋ 添加菜品</button>
   </div>
 </div>
@@ -252,6 +254,7 @@ canvas#wheel{display:block;width:100%;height:auto;border-radius:50%;box-shadow:v
 
 <div id="toast"></div>
 
+<script src="xlsx.full.min.js"></script>
 <script>
 /* ================= 数据与存储 ================= */
 const CATEGORIES = ['主食','甜品','汤','小炒','大菜'];
@@ -396,12 +399,13 @@ function drawWheel(list){
     // 名称
     const mid = a0+seg/2;
     ctx.save(); ctx.rotate(mid);
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = 'bold ' + (n>8 ? 15 : 17) + 'px sans-serif';
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineJoin='round';
     const label = truncate(d.name, n>10?4:n>6?5:7);
-    ctx.strokeText(label, R-20, 0);
-    ctx.fillStyle = '#fff'; ctx.fillText(label, R-20, 0);
+    const rLabel = R*0.62;
+    ctx.strokeText(label, rLabel, 0);
+    ctx.fillStyle = '#fff'; ctx.fillText(label, rLabel, 0);
     ctx.restore();
   }
   // 中心轴
@@ -655,6 +659,46 @@ function importData(file){
 $('#exportBtn').onclick = exportData;
 $('#importBtn').onclick = ()=> $('#importInput').click();
 $('#importInput').onchange = e => { const f = e.target.files[0]; if(f){ importData(f); } e.target.value=''; };
+
+/* ================= 从 Excel 导入 ================= */
+async function importExcel(file){
+  let buf;
+  try{ buf = await file.arrayBuffer(); }catch{ toast('读取文件失败'); return; }
+  let wb;
+  try{ wb = XLSX.read(buf, {type:'array'}); }catch{ toast('Excel 解析失败，确认是 xls/xlsx 文件'); return; }
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if(!ws){ toast('没找到数据表'); return; }
+  const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+  if(!rows.length){ toast('表格是空的'); return; }
+  const keys = Object.keys(rows[0]);
+  const typeKey = keys.find(k => /类型/.test(k));
+  const nameKey = keys.find(k => /名称|菜名|名字/.test(k));
+  if(!nameKey){ toast('没找到「名称」列（表头需含 名称）'); return; }
+  let added=0, skipped=0;
+  for(const r of rows){
+    const name = String(r[nameKey]||'').trim();
+    if(!name){ skipped++; continue; }
+    const rawType = String(typeKey ? r[typeKey] : '').trim();
+    let category = '主食';
+    for(const c of CATEGORIES){ if(rawType && rawType.includes(c)){ category = c; break; } }
+    const dish = {
+      id: 'd'+Date.now()+Math.random().toString(36).slice(2,7),
+      name: name.slice(0,20),
+      category,
+      photo: null,
+      createdAt: Date.now()
+    };
+    const dup = dishes.some(x => x.name===dish.name && x.category===dish.category);
+    if(dup){ skipped++; continue; }
+    await persistDish(dish);
+    added++;
+  }
+  dishes = await loadDishes();
+  renderList(); refreshWheel();
+  toast('导入完成：新增 '+added+'，跳过重复/空行 '+skipped);
+}
+$('#importExcelBtn').onclick = ()=> $('#excelInput').click();
+$('#excelInput').onchange = e => { const f = e.target.files[0]; if(f){ importExcel(f); } e.target.value=''; };
 
 /* ================= 启动 ================= */
 (async function init(){
